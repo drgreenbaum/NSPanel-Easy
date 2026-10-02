@@ -134,10 +134,14 @@ For more details about these specifications, please visit the [WPA3™ Specifica
 
 Choose the pages where the bars, indicating the status of entities linked to hardware buttons, will be displayed.
 
+By default, the bars are displayed only on the home page.
+If none of the selected pages is valid, the bars are displayed on the home page.
+
 ### Labels Pages
 
 Choose the pages where the labels of the hardware buttons will be displayed.
 Currently available: Home (default) and Screen saver (sleep) page.
+If none of the selected pages is valid, the labels are displayed on the home page.
 The labels are not visible on the US landscape model.
 
 ### Activate Relay x local Fallback (Optional)

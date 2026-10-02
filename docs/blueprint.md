@@ -134,6 +134,9 @@ For more details about these specifications, please visit the [WPA3™ Specifica
 
 Choose the pages where the bars, indicating the status of entities linked to hardware buttons, will be displayed.
 
+By default, the bars are displayed on all the listed pages.
+If none of the selected pages is valid, the bars are displayed on the home page.
+
 ### Activate Relay x local Fallback (Optional)
 
 Normally, the internal relays of the NSPanels are triggered via HA.

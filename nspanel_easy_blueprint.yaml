@@ -1257,68 +1257,69 @@ blueprint:
       description: Select how the physical buttons will behave.
       collapsed: true
       input:
-        hw_buttons_bars_pages:
+        hw_buttons_bars_visible_pages:
           name: Hardware Buttons - Visibility Pages
           description: >
             Choose the pages where the bars, indicating the status of entities linked to hardware buttons, will be displayed.
 
             ***Attention!** Overlapping of button bars with other components may occur on some pages. Please proceed with caution.*
           default:
-            - '2'
-            - '61440'
-            - '3932160'
-            - '65536'
-            - '131072'
-            - '512'
-            - '256'
-            - '134217728'
-            - '124'
-            - '8388608'
-            - '128'
-            - '2048'
-            - '4194304'
-            - '1024'
-            - '33554432'
-            - '67108864'
-            - '16777216'
+            - 'home'
+            - 'buttonpage01,buttonpage02,buttonpage03,buttonpage04'
+            - 'entitypage01,entitypage02,entitypage03,entitypage04'
+            - 'notification'
+            - 'qrcode'
+            - 'screensaver'
+            - 'settings'
+            - 'utilities'
+            - 'weather01,weather02,weather03,weather04,weather05'
+            - 'alarm'
+            - 'climate'
+            - 'cover'
+            - 'fan'
+            - 'light'
+            - 'media_player'
+            - 'confirm'
+            - 'keyb_num'
           selector:
             select:
               multiple: true
               options:
+                # Values are page names (comma-separated when an option covers more than one page)
                 - label: "Home (default)"
-                  value: '2'                          # 2^1
+                  value: 'home'
                 - label: "Buttons pages"
-                  value: '61440'                      # 2^12 + 2^12 + 2^14 + 2^15
+                  value: 'buttonpage01,buttonpage02,buttonpage03,buttonpage04'
                 - label: "Entities pages"
-                  value: '3932160'                    # 2^18 + 2^19 + 2^20 + 2^21
+                  value: 'entitypage01,entitypage02,entitypage03,entitypage04'
                 - label: "Notification page"
-                  value: '65536'                      # 2^16
+                  value: 'notification'
                 - label: "QR code page"
-                  value: '131072'                     # 2^17
+                  value: 'qrcode'
                 - label: "Screen saver (sleep) page"
-                  value: '512'                        # 2^9
+                  value: 'screensaver'
                 - label: "Settings page"
-                  value: '256'                        # 2^8
+                  value: 'settings'
                 - label: "Utilities page"
-                  value: '134217728'                  # 2^27
+                  value: 'utilities'
                 - label: "Weather pages"
-                  value: '124'                        # 2^2 + 2^3 + 2^4 + 2^5 + 2^6
+                  value: 'weather01,weather02,weather03,weather04,weather05'
                 - label: "Alarm control panel page"
-                  value: '8388608'                    # 2^23
+                  value: 'alarm'
                 - label: "Climate page"
-                  value: '128'                        # 2^7
+                  value: 'climate'
                 - label: "Cover page"
-                  value: '2048'                       # 2^11
+                  value: 'cover'
                 - label: "Fan page"
-                  value: '4194304'                    # 2^22
+                  value: 'fan'
                 - label: "Light page"
-                  value: '1024'                       # 2^10
+                  value: 'light'
                 - label: "Media player page"
-                  value: '33554432'                   # 2^25
+                  value: 'media_player'
                 - label: "Confirm pop-up page"
-                  value: '67108864'                   # 2^26
+                  value: 'confirm'
                 - label: "Keyboard pop-up page"
-                  value: '16777216'                   # 2^24
+                  value: 'keyb_num'
         hw_buttons_bar_color_on:
           name: Hardware Buttons - Bar color when `On`
           description: "Choose a color for the button's bars when the controlled entity is `On`."
@@ -4994,7 +4995,7 @@ variables:
   # Set it to 'next' when a change makes the Blueprint depend on a newer firmware, e.g. a new API
   # action or a new field in an existing one. The versioning workflow replaces 'next' by the version
   # being released. Releases that keep the contract leave it unchanged, so older firmware keeps working.
-  min_esphome_version: 2026.10.0
+  min_esphome_version: next
 
   # API version [MAJOR, MINOR] this Blueprint uses, matching api_version in
   # esphome/nspanel_esphome_version.yaml. Raise MINOR when the Blueprint starts calling a new API action,
@@ -8355,15 +8356,21 @@ actions:
                             continue_on_error: true
                           - *delay_boot
 
-                          - alias: hw_buttons_bars_pages
+                          - alias: hw_buttons_bars_visible_pages
                             sequence:
                               - variables:
-                                  hw_buttons_bars_pages: !input hw_buttons_bars_pages
-                              - action: 'esphome.{{ action_prefix }}_component_val'
+                                  hw_buttons_bars_visible_pages: !input hw_buttons_bars_visible_pages
+                              - action: 'esphome.{{ action_prefix }}_component_text_list'
                                 data:
                                   page: mem
                                   id: buttons_bars_pages
-                                  val: '{{ hw_buttons_bars_pages | map("int") | sum }}'
+                                  # Each option may hold more than one page (comma-separated); an empty list is sent as ['']
+                                  txt_list: >-
+                                    {{
+                                      (hw_buttons_bars_visible_pages | join(',')).split(',') | reject('eq', '') | list
+                                      if hw_buttons_bars_visible_pages | count > 0
+                                      else ['']
+                                    }}
                                 continue_on_error: true
                               - *delay_boot
 

@@ -1265,22 +1265,6 @@ blueprint:
             ***Attention!** Overlapping of button bars with other components may occur on some pages. Please proceed with caution.*
           default:
             - 'home'
-            - 'buttonpage01,buttonpage02,buttonpage03,buttonpage04'
-            - 'entitypage01,entitypage02,entitypage03,entitypage04'
-            - 'notification'
-            - 'qrcode'
-            - 'screensaver'
-            - 'settings'
-            - 'utilities'
-            - 'weather01,weather02,weather03,weather04,weather05'
-            - 'alarm'
-            - 'climate'
-            - 'cover'
-            - 'fan'
-            - 'light'
-            - 'media_player'
-            - 'confirm'
-            - 'keyb_num'
           selector:
             select:
               multiple: true

@@ -121,11 +121,11 @@ globals:
     restore_value: true
     initial_value: '${COLOR_GRAY_LIGHT}'
 
-  # Bitmask of the pages (by page id) where the labels are drawn - home pages by default
+  # Bitmask of the pages (by page id) where the labels are drawn - home page by default
   - id: buttons_labels_pages
     type: uint64_t
     restore_value: true
-    initial_value: '(1ULL << get_page_id("home")) | (1ULL << get_page_id("home_smpl"))'
+    initial_value: '1ULL << get_page_id("home")'
 
 script:
   - id: !extend action_component_color
@@ -210,7 +210,7 @@ script:
             if (has_page_names and pages_mask == 0) {
               // Pages were selected, but none is valid - fall back to the default instead of hiding the labels
               ESP_LOGW("${TAG_HW_BUTTONS}", "Labels: no valid page selected, using 'home'");
-              pages_mask = (1ULL << get_page_id("home")) | (1ULL << get_page_id("home_smpl"));
+              pages_mask = 1ULL << get_page_id("home");
             }  // if (has_page_names and pages_mask == 0)
             if (id(buttons_labels_pages) == pages_mask) return;
             id(buttons_labels_pages) = pages_mask;

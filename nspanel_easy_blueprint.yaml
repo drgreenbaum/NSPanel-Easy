@@ -1311,14 +1311,14 @@ blueprint:
 
             ***Note:** The labels are not visible on the US landscape model.*
           default:
-            - 'home,home_smpl'
+            - 'home'
           selector:
             select:
               multiple: true
               options:
                 # Values are page names (comma-separated when an option covers more than one page)
                 - label: "Home (default)"
-                  value: 'home,home_smpl'
+                  value: 'home'
                 - label: "Screen saver (sleep) page"
                   value: 'screensaver'
         hw_buttons_bar_color_on:

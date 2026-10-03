@@ -8733,7 +8733,9 @@ actions:
                               - '{{ nspanel_event.entity.split(".")[0] == "humidifier" }}'
                               - '{{ is_number(nspanel_event.value) }}'
                             sequence:
-                              - action: humidifier.set_humidity
+                              - variables:
+                                  set_humidity_srv: "humidifier.set_humidity"  # Templated to avoid unknown action warnings when humidifier isn't loaded
+                              - action: '{{ set_humidity_srv }}'
                                 data:
                                   humidity: '{{ nspanel_event.value | float | round(0) | int }}'
                                 target:
@@ -8776,7 +8778,9 @@ actions:
                                   - alias: Mode button
                                     conditions: '{{ humidifier_mode | length > 0 }}'
                                     sequence:
-                                      - action: humidifier.set_mode
+                                      - variables:
+                                          set_mode_srv: "humidifier.set_mode"  # Templated to avoid unknown action warnings when humidifier isn't loaded
+                                      - action: '{{ set_mode_srv }}'
                                         data:
                                           mode: '{{ humidifier_mode }}'
                                         target:

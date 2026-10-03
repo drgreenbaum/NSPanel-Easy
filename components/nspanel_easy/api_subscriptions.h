@@ -43,7 +43,7 @@ enum class Visibility : uint8_t {
 };
 
 /// @brief Persisted format version. Bump whenever SubBinding's layout changes.
-static constexpr uint8_t SUB_FORMAT_VERSION = 3;  // 3: SubBinding gained the attribute field
+static constexpr uint8_t SUB_FORMAT_VERSION = 4;  // 4: SubHeader gained entity_len
 
 /// @brief Upper bound on bindings; storage is allocated to the configured count, not this.
 #ifndef NSPANEL_EASY_SUB_MAX
@@ -65,12 +65,34 @@ static constexpr uint16_t SUB_CHUNK_SIZE = 4;
 /// @brief Number of NVS chunks needed to hold SUB_MAX bindings.
 static constexpr uint16_t SUB_CHUNK_COUNT = (SUB_MAX + SUB_CHUNK_SIZE - 1) / SUB_CHUNK_SIZE;
 
-static constexpr uint8_t SUB_ATTR_LEN = 24;          ///< Longest stored attribute name
-static constexpr uint8_t SUB_COMPONENT_LEN = 16;     ///< Longest stored component name
-static constexpr uint8_t SUB_DEVICE_CLASS_LEN = 16;  ///< Longest device_class in use ("garage_door")
-static constexpr uint8_t SUB_ENTITY_LEN = 64;        ///< Longest stored entity_id
-static constexpr uint8_t SUB_PAGE_LEN = 12;          ///< Longest stored page name ("screensaver")
-static constexpr uint8_t SUB_STATE_LEN = 24;         ///< Longest state ("armed_custom_bypass" is 19)
+/**
+ * @brief Size of the stored entity_id buffer, including the null terminator.
+ *
+ * Configurable because it is the one field whose natural length is set by the
+ * user's Home Assistant rather than by this project: integrations that derive
+ * an entity_id from a location or a device name can exceed any fixed default.
+ * A truncated entity_id subscribes to an entity that does not exist, so the
+ * binding is silently dead. Raising this costs SUB_ENTITY_LEN bytes per live
+ * binding in RAM and widens every persisted chunk by four times the increase,
+ * which is why it is a per-installation knob rather than a generous constant.
+ *
+ * The value takes part in the persistence contract; see SubHeader::entity_len.
+ */
+#ifndef NSPANEL_EASY_SUB_ENTITY_LEN
+#define NSPANEL_EASY_SUB_ENTITY_LEN 96
+#endif  // NSPANEL_EASY_SUB_ENTITY_LEN
+
+static constexpr uint8_t SUB_ATTR_LEN = 24;                             ///< Longest stored attribute name
+static constexpr uint8_t SUB_COMPONENT_LEN = 16;                        ///< Longest stored component name
+static constexpr uint8_t SUB_DEVICE_CLASS_LEN = 16;                     ///< Longest device_class in use ("garage_door")
+static constexpr uint8_t SUB_ENTITY_LEN = NSPANEL_EASY_SUB_ENTITY_LEN;  ///< entity_id buffer, null included
+static constexpr uint8_t SUB_PAGE_LEN = 12;                             ///< Longest stored page name ("screensaver")
+static constexpr uint8_t SUB_STATE_LEN = 24;                            ///< Longest state ("armed_custom_bypass" is 19)
+
+// Held in a uint8_t in SubHeader, so the contract check cannot represent more.
+// The lower bound is the shortest buffer that still fits a realistic entity_id.
+static_assert(NSPANEL_EASY_SUB_ENTITY_LEN >= 32, "api_subscribe_entity_len must be at least 32");
+static_assert(NSPANEL_EASY_SUB_ENTITY_LEN <= 255, "api_subscribe_entity_len must not exceed 255");
 
 /// @brief Attribute subscribed alongside the state for climate bindings, unlike
 ///        SubBinding::attribute which is subscribed instead of the state.
@@ -92,14 +114,22 @@ enum SubEntityState : uint8_t {
   SUB_STATE_OFF,           ///< Inactive for this domain
   SUB_STATE_ON,            ///< Active for this domain
   SUB_STATE_TRANSITIONAL,  ///< In motion; shown in both polarities
+  SUB_STATE_UNAVAILABLE,   ///< Entity reported unavailable; see UnavailableBehavior
 };
 
 /**
- * @brief Domains whose visible state set spans more than one state.
+ * @brief Domains that need on-device handling beyond the generic state lists.
  *
- * Only these need on-device icon and colour resolution. Every other domain has
- * a single visible state per polarity, so the blueprint resolves the appearance
- * once and pushes it, and ESPHome only toggles visibility.
+ * Most of these have a visible state set spanning more than one state, so they
+ * need on-device icon and colour resolution. SUB_DOMAIN_VALUE is the exception:
+ * its appearance comes from the blueprint like any generic entity, but its
+ * state is a free-form value that the generic on/off lists cannot classify.
+ * Every other domain has a single visible state per polarity, so the blueprint
+ * resolves the appearance once and pushes it, and ESPHome only toggles
+ * visibility.
+ *
+ * Values are appended only. Bindings persist the domain, and although it is
+ * re-derived on load, keeping the numbering stable avoids surprises.
  */
 enum SubDomain : uint8_t {
   SUB_DOMAIN_GENERIC = 0,   ///< Appearance supplied by the blueprint
@@ -108,6 +138,7 @@ enum SubDomain : uint8_t {
   SUB_DOMAIN_COVER,         ///< cover; device_class dependent
   SUB_DOMAIN_LOCK,          ///< lock
   SUB_DOMAIN_WATER_HEATER,  ///< water_heater
+  SUB_DOMAIN_VALUE,         ///< input_number, number, sensor; any usable value is active
 };
 
 /// @brief Icon and colour for a component in a given state.
@@ -202,12 +233,22 @@ template<size_t N> inline bool sub_state_in(const char *state, const char *const
 /// @brief States that carry no usable value, for any domain.
 static constexpr const char *SUB_UNUSABLE_STATES[] = {"unknown", "unavailable", "none", "None"};
 
+/// @brief States that mean the entity itself is gone, as opposed to merely
+///        having no usable value yet. "unknown" is deliberately absent: a
+///        `button` or `script` entity that has never run reports "unknown"
+///        while remaining perfectly actionable. "none" and "None" are also
+///        absent: they are not availability states in Home Assistant and can be
+///        legitimate values (e.g. a `select` option). Only "unavailable" is
+///        used, matching the Blueprint render and tap guard, so every surface
+///        agrees on which buttons are unavailable.
+static constexpr const char *SUB_UNAVAILABLE_STATES[] = {"unavailable"};
+
 /**
  * @brief Derive the domain from an entity_id.
  *
  * @param entity_id Full entity_id, e.g. "cover.garage_door".
- * @return Matching SubDomain, or SUB_DOMAIN_GENERIC when no on-device
- *         appearance resolution is needed.
+ * @return Matching SubDomain, or SUB_DOMAIN_GENERIC when neither on-device
+ *         appearance resolution nor value classification is needed.
  */
 inline SubDomain parse_sub_domain(const char *entity_id) {
   const char *dot = strchr(entity_id, '.');
@@ -224,7 +265,10 @@ inline SubDomain parse_sub_domain(const char *entity_id) {
       {"alarm_control_panel", SUB_DOMAIN_ALARM},
       {"climate", SUB_DOMAIN_CLIMATE},
       {"cover", SUB_DOMAIN_COVER},
+      {"input_number", SUB_DOMAIN_VALUE},
       {"lock", SUB_DOMAIN_LOCK},
+      {"number", SUB_DOMAIN_VALUE},
+      {"sensor", SUB_DOMAIN_VALUE},
       {"water_heater", SUB_DOMAIN_WATER_HEATER},
   };
   for (const DomainEntry &entry : DOMAINS) {
@@ -247,7 +291,13 @@ inline SubDomain parse_sub_domain(const char *entity_id) {
  * @return Classification, or SUB_STATE_TRANSITIONAL while moving.
  */
 inline SubEntityState evaluate_sub_state(SubDomain domain, const char *state) {
-  if (state == nullptr || state[0] == '\0' || sub_state_in(state, SUB_UNUSABLE_STATES)) {
+  if (state == nullptr || state[0] == '\0') {
+    return SUB_STATE_NEITHER;  // Nothing received yet, which is not the same as unavailable
+  }
+  if (sub_state_in(state, SUB_UNAVAILABLE_STATES)) {
+    return SUB_STATE_UNAVAILABLE;
+  }
+  if (sub_state_in(state, SUB_UNUSABLE_STATES)) {
     return SUB_STATE_NEITHER;
   }
 
@@ -316,6 +366,13 @@ inline SubEntityState evaluate_sub_state(SubDomain domain, const char *state) {
       }
       return (strcmp(state, "off") == 0) ? SUB_STATE_OFF : SUB_STATE_NEITHER;
     }  // case SUB_DOMAIN_WATER_HEATER
+
+    case SUB_DOMAIN_VALUE: {
+      // A value entity has no on/off vocabulary: any usable value counts as
+      // active, matching the blueprint's entity_state_is_on. Unusable and
+      // unavailable states were already handled above.
+      return SUB_STATE_ON;
+    }  // case SUB_DOMAIN_VALUE
 
     case SUB_DOMAIN_GENERIC:
     default: {
@@ -501,6 +558,7 @@ inline SubAppearance resolve_sub_appearance(SubDomain domain, const char *device
       return {Icons::MDI_WATER_BOILER, color_on};
     }  // case SUB_DOMAIN_WATER_HEATER
 
+    case SUB_DOMAIN_VALUE:  // Appearance supplied by the blueprint, like a generic entity
     case SUB_DOMAIN_GENERIC:
     default:
       return {nullptr, color_on};  // Caller uses the blueprint-supplied appearance

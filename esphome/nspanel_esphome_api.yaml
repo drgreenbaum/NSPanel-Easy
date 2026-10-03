@@ -99,6 +99,19 @@ api:
               return;
             }
 
+            // Title and icon for the next entity details page: [entity, title, icon].
+            // Sent by the Blueprint right before `entity_details_show`, so it is stored here,
+            // synchronously, instead of in the queued script: a busy queue could otherwise
+            // store it after the page change that reports it back.
+            if (page == "mem" && id == "details_overlap") {
+              details_overlap.entity = txt_list[0];
+              details_overlap.title = (txt_list.size() > 1) ? txt_list[1] : "";
+              details_overlap.icon = (txt_list.size() > 2) ? txt_list[2] : "";
+              ESP_LOGV("${TAG_API}", "  details_overlap: '%s', '%s', '%s'", details_overlap.entity.c_str(),
+                       details_overlap.title.c_str(), details_overlap.icon.c_str());
+              return;
+            }  // if (page == "mem" && id == "details_overlap")
+
             action_component_text_list->execute(
               page.c_str(),
               id.c_str(),
@@ -166,8 +179,17 @@ api:
                 or entity == "embedded_climate"
                 #endif  // NSPANEL_EASY_ADDON_CLIMATE_BASE
                 ) {
+              const uint8_t details_page_id = get_page_id(entity_id.domain.c_str());
+              const bool entity_changed = (detailed_entity->state != entity);
               detailed_entity->publish_state(entity);
-              goto_page->execute(get_page_id(entity_id.domain.c_str()));
+              if (details_page_id != UINT8_MAX and details_page_id == current_page_id and entity_changed) {
+                // `goto_page` ignores requests for the current page, so reload it directly.
+                // The reload fires `on_page`, which reports the new entity to the Blueprint.
+                ESP_LOGD("${TAG_API}", "Reload page '%s' for '%s'", page_names[details_page_id], entity.c_str());
+                disp1->goto_page(details_page_id);
+              } else {
+                goto_page->execute(details_page_id);
+              }  // if (same page, different entity)
               // An empty `back_page` means "keep the current return target".
               // An unknown page name would resolve to UINT8_MAX, which is not a valid
               // page and would break the back button, so fall back to the home page.
@@ -185,7 +207,7 @@ api:
       variables:
         page: string       # Page name for visibility control (mandatory).
         id: string         # Identifier of the component.
-        icon: string       # Icon codepoint, e.g., "/uE6E8" for `mdi:lightbulb-on-outline`.
+        icon: string       # Icon codepoint, e.g., "\uE6E8" for `mdi:lightbulb-on-outline`.
         icon_color: int[]  # RGB color array for the icon, e.g., [0, 255, 0] for green.
         visible: bool      # Set to `true` for visible or `false` for hidden.
       then:
@@ -339,7 +361,51 @@ script:
           ESP_LOGV("${TAG_API}", "  page: %s", page.c_str());
           ESP_LOGV("${TAG_API}", "  component: %s", component.c_str());
           ESP_LOGV("${TAG_API}", "  val: %" PRId32, val);
-          if (page == "mem") return;
+          if (page == "mem") {
+            // Sets how buttons bound to an unavailable entity are rendered, for every
+            // per-entity button surface at once: button pages, climate page custom
+            // buttons and home page custom buttons. Held on the device because the home
+            // page custom buttons are rendered locally from API subscriptions, with no
+            // blueprint round trip to carry a per-call parameter.
+            // Values: 0 = render as off (legacy), 1 = indicate, 2 = hide.
+            if (component == "unavailable_behavior") {
+              nspanel_easy::UnavailableBehavior requested;
+              switch (val) {
+                case 0:
+                  requested = nspanel_easy::UnavailableBehavior::RENDER_AS_OFF;
+                  break;
+                case 1:
+                  requested = nspanel_easy::UnavailableBehavior::INDICATE;
+                  break;
+                case 2:
+                  requested = nspanel_easy::UnavailableBehavior::HIDE;
+                  break;
+                default:
+                  ESP_LOGW("${TAG_API}", "Unknown unavailable_behavior %" PRId32 ", keeping current", val);
+                  return;
+              }  // switch (val)
+
+              if (requested == nspanel_easy::unavailable_behavior) return;
+              // Leaving HIDE: buttons hidden on the current page must be shown again
+              // by the refresh that follows, which is not a page entry.
+              nspanel_easy::unavailable_unhide_pending =
+                  (nspanel_easy::unavailable_behavior == nspanel_easy::UnavailableBehavior::HIDE);
+              nspanel_easy::unavailable_behavior = requested;
+
+              // Subscription renders happen on-device and only on state changes, so
+              // a button already rendered under the previous behaviour (including a
+              // hidden one) would keep that appearance until its entity changed.
+              // The setting also arrives after the first renders at boot. Replaying
+              // the stored states applies the new behaviour immediately.
+              // Blueprint-driven buttons are re-rendered by the blueprint's refresh
+              // of the current page, which reads the current setting; leaving HIDE
+              // is covered by unavailable_unhide_pending above.
+              #ifdef NSPANEL_EASY_SUBSCRIBE
+              nspanel_easy::sub_render_all();
+              #endif  // NSPANEL_EASY_SUBSCRIBE
+            }  // if (component == "unavailable_behavior")
+            return;
+          }  // if (page == "mem")
           if (page.empty()) {
             disp1->set_component_value(component.c_str(), val);
             return;

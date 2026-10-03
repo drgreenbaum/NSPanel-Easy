@@ -6,7 +6,7 @@
 ##################################################################################################
 ---
 blueprint:
-  name: NSPanel Easy Configuration (v2026.9.15)
+  name: NSPanel Easy Configuration (v2026.10.0)
   author: Edward Firmo (https://github.com/edwardtfn)
   description: >
     # NSPanel Easy Configuration via Blueprint
@@ -17,7 +17,7 @@ blueprint:
   source_url: https://raw.githubusercontent.com/edwardtfn/NSPanel-Easy/refs/tags/latest/nspanel_easy_blueprint.yaml
   domain: automation
   homeassistant:
-    min_version: 2026.7.0
+    min_version: 2026.8.0
 
   input:
     nspanel_name:  # This key was kept with this name to support inputs from legacy versions where the panel name was used
@@ -4655,30 +4655,206 @@ blueprint:
               min: 100
               max: 10000
               unit_of_measurement: milliseconds
-    advanced_settings:
-      name: Advanced settings
-      icon: mdi:cogs
+    versioning:
+      name: Versioning
+      icon: mdi:update
+      description: >-
+        How the Blueprint handles version mismatches between the Blueprint, the ESPHome firmware and the TFT
+        file, with optional custom actions for advanced users.
       collapsed: true
       input:
         esphome_version_check_bypass:
           name: Version check - Ignore older ESPHome firmware
           description: >-
-            By default the Blueprint stops when the panel's ESPHome firmware is older than the Blueprint,
-            because that firmware may not have registered all the API actions the Blueprint calls.
+            By default the Blueprint stops when the panel's ESPHome firmware is older than the minimum
+            version this Blueprint requires, because that firmware may not have registered all the API
+            actions the Blueprint calls. Newer releases that keep compatibility with your firmware do not
+            stop the Blueprint.
 
 
             Enable this to keep the Blueprint running anyway, so the panel stays usable while you update
             your firmware.
 
 
-            **Attention!** Features added after your firmware version will not work, and a sequence that
-            reaches one of them stops at that point. Everything the firmware does support keeps working.
+            **Attention!** Features that need a newer firmware will not work, and a sequence that reaches
+            one of them stops at that point. Everything the firmware does support keeps working.
 
 
             *The version mismatch notification is still created, so you do not forget to finish the update.*
           default: false
           selector:
             boolean: {}
+        versioning_esphome_outdated_action:
+          name: ESPHome firmware outdated - Custom action
+          description: >-
+            Optional action(s) to run when the panel's ESPHome firmware is older than the minimum version
+            this Blueprint requires.
+
+
+            This runs only when the automations are reloaded (e.g. after re-importing the Blueprint) or when
+            Home Assistant starts, and only while the mismatch persists. It does not run when the firmware
+            version cannot be determined.
+
+
+            Variables available in your templates:
+
+            - `min_esphome_version_string`: the minimum firmware version this Blueprint requires.
+
+            - `api_version`: the API version this Blueprint uses, as `[major, minor]`.
+
+            - `esphome_api_version`: the API version reported by the firmware as `[major, minor]`, when
+            the run was started by a panel event (empty otherwise).
+
+            - `blueprint_version`: this Blueprint's version, the recommended version to update the firmware
+            to (the matching release tag is `v{{ blueprint_version }}`).
+
+            - `esphome_version_string`: the firmware version currently reported by the panel.
+
+            - `nspanel_name`: the panel's ESPHome name, sanitized as used in its action names
+            (e.g. `nspanel_kitchen`).
+
+            - `nspanel_full_name`: the panel's display name in Home Assistant.
+
+            - `nspanel_deviceid`: the panel's device ID in Home Assistant.
+
+
+            **Attention!** These actions run inside the Blueprint: an error stops the current run, and waits
+            or delays hold it. For long tasks (e.g. compiling and installing a firmware), call a script with
+            `script.turn_on`, which returns immediately.
+          default: []
+          selector:
+            action: {}
+        versioning_tft_outdated_action:
+          name: TFT file outdated - Custom action
+          description: >-
+            Optional action(s) to run when the panel reports a TFT file older than its ESPHome firmware
+            requires.
+
+
+            This runs when the panel boots and reports its versions, after the Blueprint and the ESPHome
+            firmware versions are checked.
+
+
+            Variables available in your templates:
+
+            - `versions.tft`: the TFT version currently on the panel.
+
+            - `versions.tft_min`: the minimum TFT version required by the firmware.
+
+            - `versions.esphome`: the firmware version reported by the panel.
+
+            - `nspanel_name`, `nspanel_full_name` and `nspanel_deviceid`: the panel's identification, as
+            described in the ESPHome firmware action above.
+
+
+            *If the Upload TFT add-on is set to update the TFT automatically, the panel will already start an
+            update on its own. Use this action for notifications or your own integrations, not to start a
+            second upload.*
+
+
+            **Attention!** These actions run inside the Blueprint: an error stops the current run, and waits
+            or delays hold it. For long tasks, call a script with `script.turn_on`, which returns immediately.
+          default: []
+          selector:
+            action: {}
+        versioning_blueprint_outdated_action:
+          name: Blueprint outdated - Custom action
+          description: >-
+            Optional action(s) to run when the panel's ESPHome firmware requires a newer version of this
+            Blueprint, or reports an API version this Blueprint no longer supports.
+
+
+            This runs when the panel boots and reports its versions.
+
+
+            Variables available in your templates:
+
+            - `blueprint_version`: this Blueprint's version.
+
+            - `versions.blueprint_min`: the minimum Blueprint version required by the firmware.
+
+            - `versions.esphome`: the firmware version reported by the panel.
+
+            - `api_version` and `esphome_api_version`: the API version used by this Blueprint and
+            the one reported by the firmware, as `[major, minor]`.
+
+            - `nspanel_name`, `nspanel_full_name` and `nspanel_deviceid`: the panel's identification, as
+            described in the ESPHome firmware action above.
+
+
+            *Home Assistant has no action to re-import a Blueprint, so this is mostly useful for notifications.*
+
+
+            **Attention!** These actions run inside the Blueprint: an error stops the current run, and waits
+            or delays hold it. For long tasks, call a script with `script.turn_on`, which returns immediately.
+          default: []
+          selector:
+            action: {}
+    advanced_settings:
+      name: Advanced settings
+      icon: mdi:cogs
+      collapsed: true
+      input:
+        unavailable_behavior:
+          name: Unavailable entities - Button appearance
+          description: >-
+            Please select how a button should be shown when the entity it is bound to reports
+            `unavailable`.
+
+
+            This applies to every button bound to an entity: the button pages, the custom buttons on
+            the climate page and the custom buttons on the home page.
+
+
+            *Grey out* keeps the button in place with its own icon greyed, so the layout does not move
+            and the button is visibly not actionable. *Hide* removes it from the page, leaving an empty
+            slot. *Show as off* is the previous behaviour, where an unavailable entity is
+            indistinguishable from one that is simply off.
+
+
+            With *Grey out* or *Hide*, tapping an unavailable button does nothing.
+
+
+            *An entity reporting `unknown` is not affected: a button or script entity that has never
+            run reports `unknown` while remaining perfectly usable.*
+          default: '1'
+          selector:
+            select:
+              multiple: false
+              options:
+                - label: Show as off
+                  value: '0'
+                - label: Grey out
+                  value: '1'
+                - label: Hide
+                  value: '2'
+        button_tap_behavior:
+          name: Buttons - Tap behavior
+          description: >-
+            Please select what a short tap does on a button bound to an entity, on the button pages and
+            on the custom buttons of the home page.
+
+
+            *Toggle* performs the entity's action (on/off, open/close) and opens the detail page only
+            with a long press. Entities that cannot be toggled, like climate or media players, always
+            open their detail page.
+
+
+            *Open details when adjustable* opens the detail page on a tap for covers with position or
+            tilt, fans with speed, oscillation or preset modes, and lights with brightness or color, so their
+            controls are one tap away. Entities that are only on/off still toggle.
+
+
+            *Hardware buttons and the custom buttons on the climate page are not affected.*
+          default: toggle
+          selector:
+            select:
+              multiple: false
+              options:
+                - label: Toggle
+                  value: toggle
+                - label: Open details when adjustable
+                  value: details_when_adjustable
         value_hide_when_zero:
           name: Values - Hide when zero
           description: >-
@@ -4880,7 +5056,19 @@ trigger_variables:
 variables:
   # Blueprint version will be following release version defined automatically when merging to main
   # There's no need to change it here
-  blueprint_version: 2026.9.15
+  blueprint_version: 2026.10.0
+
+  # Minimum ESPHome firmware version required by this Blueprint (the Blueprint -> ESPHome contract).
+  # Set it to 'next' when a change makes the Blueprint depend on a newer firmware, e.g. a new API
+  # action or a new field in an existing one. The versioning workflow replaces 'next' by the version
+  # being released. Releases that keep the contract leave it unchanged, so older firmware keeps working.
+  min_esphome_version: 2026.10.0
+
+  # API version [MAJOR, MINOR] this Blueprint uses, matching api_version in
+  # esphome/nspanel_esphome_version.yaml. Raise MINOR when the Blueprint starts calling a new API action,
+  # and MAJOR when it follows a firmware change that removed an action or changed its parameters.
+  # Kept as a list: Home Assistant would convert "1.10" to the number 1.1.
+  api_version: [1, 0]
 
   # Firmware version as reported by the ESPHome integration in the device registry.
   # Format: "<project_version> (ESPHome <compiler_version>)", e.g. "2026.8.5 (ESPHome 2026.6.0)".
@@ -4909,21 +5097,70 @@ variables:
     }}
   blueprint_version_parts: >-
     {{ (blueprint_version | string).split('.') | map('int') | list }}
-  # ESPHome must be equal to or newer than the Blueprint. The documented update
-  # order is ESPHome -> TFT -> Blueprint, so a Blueprint ahead of the firmware
-  # means the user skipped a step and new API actions may not exist yet.
-  # Fails closed: an unparseable version blocks all action calls.
+  # Parsed into an integer tuple. The unresolved 'next' sentinel (development
+  # builds) and any unparseable value fall back to this Blueprint's own version,
+  # the strictest requirement.
+  min_esphome_version_parts: >-
+    {{
+      (min_esphome_version | string).split('.') | map('int') | list
+      if (min_esphome_version | string).split('.') | count == 3
+      and (min_esphome_version | string).split('.') | select('match', '^[0-9]+$') | list | count == 3
+      else blueprint_version_parts
+    }}
+  # Resolved minimum version, for notifications and custom actions.
+  min_esphome_version_string: "{{ min_esphome_version_parts | join('.') }}"
+  # API version reported by the firmware, parsed into [MAJOR, MINOR]. Only panel
+  # events carry it, so it is empty for runs started by any other trigger, and for
+  # firmware that does not report it yet.
+  # Kept as a list: a rendered "1.10" would be converted to the number 1.1.
+  esphome_api_version: >-
+    {%- set raw = (
+      trigger.event.data.api_version | default('', true) | string
+      if trigger is defined and trigger.id == 'nspanel_event'
+      and trigger.event is defined and trigger.event.data is defined
+      else ''
+    ) -%}
+    {{
+      raw.split('.') | map('int') | list
+      if raw.split('.') | count == 2
+      and raw.split('.') | select('match', '^[0-9]+$') | list | count == 2
+      else []
+    }}
+  # The firmware provides an older API than this Blueprint uses (an action the
+  # Blueprint calls may not exist yet).
+  esphome_api_outdated: >-
+    {{
+      esphome_api_version | count == 2
+      and (
+        esphome_api_version[0] < api_version[0]
+        or (esphome_api_version[0] == api_version[0]
+            and esphome_api_version[1] < api_version[1])
+      )
+    }}
+  # The firmware removed or changed actions this Blueprint calls (a newer API
+  # MAJOR), so the Blueprint must be updated.
+  blueprint_api_outdated: >-
+    {{
+      esphome_api_version | count == 2
+      and esphome_api_version[0] > api_version[0]
+    }}
+  # ESPHome must be equal to or newer than min_esphome_version and, when reported,
+  # provide the API version this Blueprint uses. The documented update order is
+  # ESPHome -> TFT -> Blueprint, so a Blueprint requiring a newer firmware means
+  # the user skipped a step and new API actions may not exist yet.
+  # Fails closed: an unparseable firmware version blocks all action calls.
   esphome_compatible: >-
     {{
       esphome_version_parts | count == 3
       and (
-        esphome_version_parts[0] > blueprint_version_parts[0]
-        or (esphome_version_parts[0] == blueprint_version_parts[0]
-            and esphome_version_parts[1] > blueprint_version_parts[1])
-        or (esphome_version_parts[0] == blueprint_version_parts[0]
-            and esphome_version_parts[1] == blueprint_version_parts[1]
-            and esphome_version_parts[2] >= blueprint_version_parts[2])
+        esphome_version_parts[0] > min_esphome_version_parts[0]
+        or (esphome_version_parts[0] == min_esphome_version_parts[0]
+            and esphome_version_parts[1] > min_esphome_version_parts[1])
+        or (esphome_version_parts[0] == min_esphome_version_parts[0]
+            and esphome_version_parts[1] == min_esphome_version_parts[1]
+            and esphome_version_parts[2] >= min_esphome_version_parts[2])
       )
+      and not esphome_api_outdated
     }}
   # User escape hatch for the version gate. When enabled, the Blueprint keeps
   # running against an outdated firmware instead of stopping, accepting that
@@ -5948,6 +6185,10 @@ actions:
         }}
 
       page_constructor: false
+      # True when an entity details page refresh was not triggered by an entity change:
+      # the entity stayed quiet until the wait timed out (settle pass or fallback refresh).
+      # Set per iteration by "Entity details pages refresh".
+      refresh_settled: false
 
       compact_unit_display: !input compact_unit_display
       units_separator: "{{ '' if compact_unit_display else ' ' }}"
@@ -6774,6 +7015,12 @@ actions:
 
       ##### GENERAL SETTINGS #####
       hide_if_zero: !input value_hide_when_zero
+      # How an unavailable entity is rendered. The panel holds the same value and
+      # owns the appearance; the blueprint only needs it to decide whether a tap on
+      # an unavailable button should be dropped.
+      unavailable_behavior: !input unavailable_behavior
+      # What a short tap on a per-entity button does; read by click_opens_details.
+      button_tap_behavior: !input button_tap_behavior
 
       domains_functionality:
         detailed:
@@ -6872,6 +7119,8 @@ actions:
 
             - Blueprint version: {{ blueprint_version }}
 
+            - Required firmware version: {{ min_esphome_version_string }} or newer
+
             - Reported firmware version: {{ esphome_sw_version if esphome_sw_version | length > 0 else "Unknown" }}
 
             ---
@@ -6886,7 +7135,11 @@ actions:
             [report this issue](https://github.com/edwardtfn/NSPanel-Easy/issues/new/choose),
             including the reported firmware version shown above.
             {% else %}
-            Your NSPanel Easy ESPHome firmware is older than the Blueprint,
+            {% if esphome_api_outdated %}
+            Your NSPanel Easy ESPHome firmware provides an older API version than the Blueprint requires,
+            {% else %}
+            Your NSPanel Easy ESPHome firmware is older than the minimum version required by the Blueprint,
+            {% endif %}
             {% if esphome_version_check_bypass %}
             and the version check has been bypassed, so features added after your firmware version
             will not work until you finish the update.
@@ -6898,7 +7151,13 @@ actions:
 
             - Current ESPHome version: {{ esphome_version_string }}
 
-            - Required version: {{ blueprint_version }} or newer
+            - Required version: {{ blueprint_version if esphome_api_outdated else min_esphome_version_string }} or newer
+
+            - Recommended version: {{ blueprint_version }} (same as the Blueprint)
+            {% if esphome_api_version | count == 2 %}
+
+            - API version: {{ esphome_api_version | join('.') }} (Blueprint requires {{ api_version | join('.') }})
+            {% endif %}
 
             ---
 
@@ -6906,7 +7165,8 @@ actions:
 
             Components must be updated in this order: **ESPHome**, then **TFT**, then **Blueprint**.
 
-            1. Update your ESPHome configuration to reference version {{ blueprint_version }} or newer.
+            1. Update your ESPHome configuration to reference version {{ blueprint_version
+            }}{{ '' if esphome_api_outdated else ' (or at least ' ~ min_esphome_version_string ~ ')' }}.
 
             2. Install the new firmware on your panel.
 
@@ -6916,9 +7176,68 @@ actions:
             [How to Update](https://github.com/edwardtfn/NSPanel-Easy/blob/main/docs/howto.md).*
             {% endif %}
         continue_on_error: true
+      - alias: Custom action - ESPHome firmware outdated
+        # Runs only on automation reload or HA start, and only when the firmware version is known.
+        # It is placed before the stop so it also runs when the gate blocks the Blueprint.
+        if:
+          - '{{ trigger.id in ["automation_reloaded", "ha_started"] }}'
+          - '{{ esphome_version_parts | count == 3 }}'
+        then:
+          - sequence: !input versioning_esphome_outdated_action
       - if: '{{ not esphome_version_check_bypass }}'
         then:
-          - stop: ESPHome firmware is older than the Blueprint
+          - stop: ESPHome firmware is older than required by the Blueprint (version or API)
+
+  - alias: API version gate - Blueprint outdated
+    # The firmware removed or changed API actions this Blueprint calls. Calling them
+    # would raise errors and repair issues in Home Assistant, so the run stops.
+    # Only runs started by a panel event carry the firmware's API version.
+    # There is no bypass: an outdated Blueprint cannot call the new actions.
+    if: '{{ blueprint_api_outdated }}'
+    then:
+      - action: persistent_notification.create
+        data:
+          notification_id: 'NSPanel_Easy_version_mismatch_{{ nspanel_name }}'
+          title: "NSPanel Easy - Version mismatch: Blueprint"
+          message: >
+            Your NSPanel Easy Blueprint is not compatible with the ESPHome firmware of the panel
+            **{{ nspanel_full_name }}**, so the Blueprint has stopped to avoid calling API actions this
+            firmware no longer supports.
+
+            - Current Blueprint version: {{ blueprint_version }} (API {{ api_version | join('.') }})
+
+            - ESPHome firmware version: {{ esphome_version_string if esphome_version_string | length > 0 else "Unknown" }} (API {{ esphome_api_version | join('.') }})
+
+            ---
+
+            **How to Resolve This Issue**
+
+            1. Navigate to your [Blueprint Dashboard](/config/blueprint/dashboard).
+
+            2. Locate the blueprint named "**NSPanel Easy Configuration**".
+
+            3. Click on the corresponding 3-dot menu.
+
+            4. Choose "**Re-import blueprint**".
+
+            5. Select the "**Re-import**" button.
+
+
+            *For more detailed instructions, please refer to the online documentation:
+            [How to Update Blueprint](https://github.com/edwardtfn/NSPanel-Easy/blob/main/docs/howto.md#update-blueprint).*
+        continue_on_error: true
+      - alias: Custom action - Blueprint outdated
+        # Runs once per panel boot, on the version event, as in the version mismatch handler.
+        # It is placed before the stop, which also blocks that handler.
+        if: '{{ trigger.event.data.type | default("") == "version" }}'
+        then:
+          - variables:
+              versions:
+                blueprint: '{{ trigger.event.data.blueprint | default("") }}'
+                blueprint_min: '{{ trigger.event.data.min_blueprint_version | default("") }}'
+                esphome: '{{ trigger.event.data.esphome | default("") }}'
+          - sequence: !input versioning_blueprint_outdated_action
+      - stop: Blueprint API version is older than the ESPHome firmware API version
 
   - alias: Global anchor repository
     if: '{{ false }}'  # It should never execute directly
@@ -7605,6 +7924,17 @@ actions:
                               page: mem
                               id: custom_buttons_font
                               val: !input custom_buttons_font_size
+                            continue_on_error: true
+                          - *delay_boot
+                          - alias: unavailable_behavior
+                            # Held on the panel rather than passed per call: the home page custom
+                            # buttons are rendered on-device from API subscriptions, with no
+                            # blueprint round trip to carry a parameter.
+                            action: 'esphome.{{ action_prefix }}_component_val'
+                            data:
+                              page: mem
+                              id: unavailable_behavior
+                              val: !input unavailable_behavior
                             continue_on_error: true
                           - *delay_boot
                           - alias: custom_buttons_confirm
@@ -8451,24 +8781,6 @@ actions:
                                 target:
                                   entity_id: '{{ nspanel_event.entity }}'
                                 continue_on_error: true
-                          - alias: "fan.set_preset_mode"
-                            # The display sends the index, as a mode name may contain the
-                            # separator used by the display protocol.
-                            conditions:
-                              - '{{ nspanel_event.action == "fan.set_preset_mode" }}'
-                              - '{{ nspanel_event.key == "preset_index" }}'
-                              - '{{ nspanel_event.value is defined }}'
-                            sequence:
-                              - variables:
-                                  fan_preset_modes: '{{ state_attr(nspanel_event.entity, "preset_modes") | default([], true) }}'
-                                  fan_preset_index: '{{ nspanel_event.value | int(-1) }}'
-                              - condition: '{{ fan_preset_index >= 0 and fan_preset_index < fan_preset_modes | count }}'
-                              - action: '{{ nspanel_event.action }}'
-                                data:
-                                  preset_mode: '{{ fan_preset_modes[fan_preset_index] }}'
-                                target:
-                                  entity_id: '{{ nspanel_event.entity }}'
-                                continue_on_error: true
                           - alias: "light.turn_on (rgb_color)"
                             conditions:
                               - '{{ nspanel_event.action == "light.turn_on" }}'
@@ -8540,6 +8852,31 @@ actions:
                         entity_id: '{{ entity_id }}'
                         entity_id_valid: '{{ entity_id_valid }}'
                         entity_domain: '{{ entity_id.split(".")[0] if entity_id_valid else "" }}'
+                      # Title and icon of the button that opened an entity details page. The click that
+                      # opened the page runs in a separate automation run, so the click run stores them
+                      # on the panel (`details_overlap` memory var) and the panel reports them back here,
+                      # only when they belong to the entity shown.
+                      details_overlap:
+                        icon: >-
+                          {{
+                            nspanel_event.icon
+                            if
+                              nspanel_event.icon is defined and
+                              nspanel_event.icon is string and
+                              nspanel_event.icon is match "mdi:" and
+                              nspanel_event.icon.split("mdi:")[1] in all_icons
+                            else None
+                          }}
+                        icon_color: '{{ None }}'
+                        name: >-
+                          {{
+                            nspanel_event.title
+                            if
+                              nspanel_event.title is defined and
+                              nspanel_event.title is string and
+                              nspanel_event.title | length > 0
+                            else None
+                          }}
 
                   - choose:
                       - alias: Home page
@@ -8864,6 +9201,8 @@ actions:
                                         bri: '{{ btn_bri }}'
                                         label: '{{ btn_label if page_constructor else "" }}'
                                         is_page_render: '{{ page_constructor }}'
+                                        icon_only: false
+                                        available: '{{ current_entity_state_available }}'
                                       continue_on_error: true
                                     - if:
                                         - '{{ btn_state }}'
@@ -8885,6 +9224,8 @@ actions:
                                             bri: '{{ btn_bri }}'
                                             label: ""
                                             is_page_render: false
+                                            icon_only: false
+                                            available: '{{ current_entity_state_available }}'
                                           continue_on_error: true
                                     - *delay_default
 
@@ -8924,6 +9265,14 @@ actions:
                             variables:
                               entity_id: '{{ original_state.entity_id }}'
                               entity_id_valid: '{{ original_state.entity_id_valid }}'
+                              # Set on every refresh, so the configured title and icon are not lost when
+                              # another step of this run reassigns `overlap`.
+                              overlap: >-
+                                {{
+                                  details_overlap
+                                  if details_overlap is defined
+                                  else {"icon": None, "icon_color": None, "name": None}
+                                }}
                           - *variable_entity
                           - &entity_details_title_with_icon
                             alias: Fill title of entity details page
@@ -9039,12 +9388,20 @@ actions:
                               # card instead of performing the short-press action?" — shared by every
                               # place that renders per-entity buttons (Home page, Buttons pages), so a
                               # capability added for one can't silently miss the other.
+                              # Entities without a toggle always open the card. Adjustable entities do so
+                              # only when the user opted in via `button_tap_behavior`; by default a tap
+                              # toggles and the card is reached with a long press (#446).
                               click_opens_details: >-
                                 {{
                                   entity_domain in domains_functionality.detailed_only or
-                                  (entity_domain == "cover" and supported_features | bitwise_and(132) > 0) or
-                                  (entity_domain == "fan" and supported_features | bitwise_and(11) > 0) or
-                                  (entity_domain == "light" and (color_mode_brightness or color_mode_color or color_mode_temp))
+                                  (
+                                    button_tap_behavior == "details_when_adjustable" and
+                                    (
+                                      (entity_domain == "cover" and supported_features | bitwise_and(132) > 0) or
+                                      (entity_domain == "fan" and supported_features | bitwise_and(11) > 0) or
+                                      (entity_domain == "light" and (color_mode_brightness or color_mode_color or color_mode_temp))
+                                    )
+                                  )
                                 }}
 
                           ##### LIGHT State #####
@@ -9131,21 +9488,21 @@ actions:
                                           else []
                                         }}
 
-                                      # Truncation rule: current always included.
-                                      # If <=8: send all in HA order.
-                                      # If >8 and current in first 8: send first 8.
-                                      # If >8 and current in positions 8+: send [current] + first 7 excluding current.
+                                      # Truncation rule (the picker pages through up to 32 options): current always included.
+                                      # If <=32: send all in HA order.
+                                      # If >32 and current in first 32: send first 32.
+                                      # If >32 and current in positions 32+: send [current] + first 31 excluding current.
                                       effect_list_truncated: >
-                                        {%- if effect_list_raw | length <= 8 -%}
+                                        {%- if effect_list_raw | length <= 32 -%}
                                           {%- if current_effect | length == 0 or current_effect in effect_list_raw -%}
                                             {{ effect_list_raw }}
                                           {%- else -%}
-                                            {{ ([current_effect] + (effect_list_raw | list))[:8] }}
+                                            {{ ([current_effect] + (effect_list_raw | list))[:32] }}
                                           {%- endif -%}
-                                        {%- elif current_effect | length == 0 or current_effect in effect_list_raw[:8] -%}
-                                          {{ effect_list_raw[:8] }}
+                                        {%- elif current_effect | length == 0 or current_effect in effect_list_raw[:32] -%}
+                                          {{ effect_list_raw[:32] }}
                                         {%- else -%}
-                                          {{ [current_effect] + (effect_list_raw[:7] | reject("equalto", current_effect) | list) }}
+                                          {{ [current_effect] + (effect_list_raw[:31] | reject("equalto", current_effect) | list) }}
                                         {%- endif -%}
                                   - action: 'esphome.{{ action_prefix }}_component_text_list'
                                     data:
@@ -9386,6 +9743,10 @@ actions:
                             # so each block below must be gated on its own bit only.
                             variables:
                               fan_speed_available: '{{ fan.steps > 0 and fan.supported_features | bitwise_and(1) > 0 }}'
+                              # Mirrors HA's more-info dialog: up to 3 speeds are shown as buttons
+                              # (off + speeds), more than that as a percentage slider.
+                              fan_speed_buttons: '{{ fan_speed_available and fan.steps <= 3 }}'
+                              fan_speed_slider: '{{ fan_speed_available and not fan_speed_buttons }}'
                               fan_oscillate_available: '{{ fan.supported_features | bitwise_and(2) > 0 }}'
                               fan_preset_mode_available: >
                                 {{
@@ -9434,10 +9795,10 @@ actions:
                                     - fanslider
                                     - button_up
                                     - button_down
-                                  visible: '{{ fan_speed_available }}'
+                                  visible: '{{ fan_speed_slider }}'
                                 continue_on_error: true
                               - *delay_default
-                              - if: '{{ fan_speed_available }}'
+                              - if: '{{ fan_speed_slider }}'
                                 then:
                                   - variables:
                                       color_rgb565:
@@ -9455,6 +9816,94 @@ actions:
                                         - 'button_down.pco={{ color_rgb565.grey_white if fan.percentage > 0 else color_rgb565.grey_dark }}'
                                     continue_on_error: true
                                   - *delay_default
+
+                          - alias: FAN speed buttons
+                            # Reuses the mode_bt1..mode_bt5 slots. Preset modes only take those
+                            # slots when there is no speed control, so both never compete.
+                            # Buttons run top to bottom from the highest speed down to off. A press
+                            # only reports the slot; see "Fan page mode buttons" (button_click).
+                            if: '{{ fan_speed_buttons }}'
+                            then:
+                              - variables:
+                                  speed_buttons_count: '{{ fan.steps + 1 }}'
+                                  # Same rounding as HA's fanPercentageToSpeed
+                                  speed_index_active: >-
+                                    {{
+                                      ((fan.percentage * fan.steps) / 100) | round(0) | int(0)
+                                      if is_state(entity_id, "on")
+                                      else 0
+                                    }}
+
+                              ##### Construction-only: icons, pictures, payloads and visibility #####
+                              - if: '{{ page_constructor }}'
+                                then:
+                                  - action: 'esphome.{{ nspanel_name }}_component_text_list'
+                                    data:
+                                      page: mem
+                                      id: command
+                                      txt_list: >-
+                                        {% set ns = namespace(items=[]) %}
+                                        {% set shift = 1 if states(background_type) | lower is match("light") else 0 %}
+                                        {% for slot in range(1, speed_buttons_count + 1) %}
+                                          {% set speed_index = speed_buttons_count - slot %}
+                                          {% if speed_index == 0 %}
+                                            {% set icon = all_icons["fan-off"] %}
+                                          {% elif fan.steps == 1 %}
+                                            {% set icon = all_icons["fan"] %}
+                                          {% else %}
+                                            {% set icon = all_icons["fan-speed-" ~ speed_index] %}
+                                          {% endif %}
+                                          {% set button = 'mode_bt' ~ slot %}
+                                          {% set base = 114 + ((slot - 1) * 4) %}
+                                          {% set ns.items = ns.items + [button ~ '.font=8'] %}
+                                          {% set ns.items = ns.items + [button ~ '.txt="' ~ icon ~ '"'] %}
+                                          {% set ns.items = ns.items + [button ~ '.pic=' ~ (base + 2 + shift)] %}
+                                          {% set ns.items = ns.items + [button ~ '.pic2=' ~ (base + shift)] %}
+                                        {% endfor %}
+                                        {{ ns.items }}
+                                    continue_on_error: true
+                                  - *delay_default
+                                  - action: 'esphome.{{ nspanel_name }}_components_visibility'
+                                    data:
+                                      page: fan
+                                      ids: >-
+                                        {{ range(1, speed_buttons_count + 1) | map("string") | map("regex_replace", "^", "mode_bt") | list }}
+                                      visible: true
+                                    continue_on_error: true
+                                  - *delay_default
+                                  - action: 'esphome.{{ nspanel_name }}_components_visibility'
+                                    data:
+                                      page: fan
+                                      ids: >-
+                                        {{ range(speed_buttons_count + 1, 6) | map("string") | map("regex_replace", "^", "mode_bt") | list }}
+                                      visible: false
+                                    continue_on_error: true
+                                  - *delay_default
+
+                              ##### Always: confirmed state, which also clears a pending press #####
+                              # A pending press is only cleared once its slot is the confirmed one, so
+                              # intermediate states reported during a transition keep it pending. The
+                              # page constructor and any redraw after the entity went quiet (settle
+                              # pass or fallback refresh) clear every slot, covering requests that
+                              # never make the pressed slot the active one.
+                              - action: 'esphome.{{ nspanel_name }}_component_text_list'
+                                data:
+                                  page: mem
+                                  id: command
+                                  txt_list: >-
+                                    {% set ns = namespace(items=[]) %}
+                                    {% set clear_all_pending = page_constructor or refresh_settled %}
+                                    {% for slot in range(1, speed_buttons_count + 1) %}
+                                      {% set active = (speed_buttons_count - slot) == speed_index_active %}
+                                      {% set ns.items = ns.items + ["mode_bt" ~ slot ~ ".val=" ~ (1 if active else 0)] %}
+                                      {% if active or clear_all_pending %}
+                                        {% set ns.items = ns.items + ["mode_bt" ~ slot ~ ".pco=65535"] %}  {# nextion.color.white #}
+                                        {% set ns.items = ns.items + ["mode_bt" ~ slot ~ ".pco2=65535"] %}  {# nextion.color.white #}
+                                      {% endif %}  {# active or clear_all_pending #}
+                                    {% endfor %}
+                                    {{ ns.items }}
+                                continue_on_error: true
+                              - *delay_default
 
                           - alias: FAN Preset mode
                             if: '{{ fan_preset_mode_available }}'
@@ -9488,13 +9937,14 @@ actions:
                               - if: '{{ page_constructor }}'
                                 then:
                                   - variables:
+                                      # The picker pages through up to 32 options; current is always included
                                       preset_modes_truncated: >
-                                        {%- if preset_modes_raw | length <= 8 -%}
+                                        {%- if preset_modes_raw | length <= 32 -%}
                                           {{ preset_modes_raw }}
-                                        {%- elif current_preset_mode | length == 0 or current_preset_mode in preset_modes_raw[:8] -%}
-                                          {{ preset_modes_raw[:8] }}
+                                        {%- elif current_preset_mode | length == 0 or current_preset_mode in preset_modes_raw[:32] -%}
+                                          {{ preset_modes_raw[:32] }}
                                         {%- else -%}
-                                          {{ [current_preset_mode] + (preset_modes_raw[:7] | reject("equalto", current_preset_mode) | list) }}
+                                          {{ [current_preset_mode] + (preset_modes_raw[:31] | reject("equalto", current_preset_mode) | list) }}
                                         {%- endif -%}
                                   - action: 'esphome.{{ nspanel_name }}_component_text_list'
                                     data:
@@ -9540,6 +9990,7 @@ actions:
                                             {% for mode in preset_modes_raw %}
                                               {% set button = 'mode_bt' ~ loop.index %}
                                               {% set base = 114 + (loop.index0 * 4) %}
+                                              {% set ns.items = ns.items + [button ~ '.font=2'] %}
                                               {% set ns.items = ns.items + [button ~ '.txt="' ~ (mode | replace('"', "")) ~ '"'] %}
                                               {% set ns.items = ns.items + [button ~ '.pic=' ~ (base + 2 + shift)] %}
                                               {% set ns.items = ns.items + [button ~ '.pic2=' ~ (base + shift)] %}
@@ -9579,7 +10030,12 @@ actions:
                               - if: '{{ preset_buttons }}'
                                 then:
                                   # The pictures are pushed by the page constructor, so an update
-                                  # only has to move the state of each button.
+                                  # only has to move the state of each button and clear the
+                                  # pending colour a press leaves behind. That colour is only
+                                  # cleared once its button is the confirmed one, or on the page
+                                  # constructor and any redraw after the entity went quiet (settle
+                                  # pass or fallback refresh), so intermediate states reported
+                                  # during a transition keep the press pending.
                                   - action: 'esphome.{{ nspanel_name }}_component_text_list'
                                     data:
                                       page: mem
@@ -9587,9 +10043,14 @@ actions:
                                       txt_list: >-
                                         {% set ns = namespace(items=[]) %}
                                         {% set running = states(entity_id) == "on" %}
+                                        {% set clear_all_pending = page_constructor or refresh_settled %}
                                         {% for mode in preset_modes_raw %}
                                           {% set active = running and mode == current_preset_mode %}
                                           {% set ns.items = ns.items + ["mode_bt" ~ loop.index ~ ".val=" ~ (1 if active else 0)] %}
+                                          {% if active or clear_all_pending %}
+                                            {% set ns.items = ns.items + ["mode_bt" ~ loop.index ~ ".pco=65535"] %}  {# nextion.color.white #}
+                                            {% set ns.items = ns.items + ["mode_bt" ~ loop.index ~ ".pco2=65535"] %}  {# nextion.color.white #}
+                                          {% endif %}  {# active or clear_all_pending #}
                                         {% endfor %}
                                         {{ ns.items }}
                                     continue_on_error: true
@@ -9812,7 +10273,21 @@ actions:
                                 }}
                               hvac_modes: '{{ state_attr(climate_entity, "hvac_modes") if settings_entity_domain == "climate" }}'
                               friendly_name_raw: '{{ state_attr(climate_entity, "friendly_name") }}'
-                              friendly_name: '{{ friendly_name_raw if friendly_name_raw and friendly_name_raw is string else "" }}'
+                              friendly_name: >-
+                                {%- if
+                                      details_overlap is defined and
+                                      details_overlap.name is string and
+                                      details_overlap.name | length > 0 and
+                                      (
+                                        "embedded_climate"
+                                        if climate_entity == thermostat_embedded
+                                        else climate_entity
+                                      ) == original_state.entity_id
+                                -%}
+                                  {{ details_overlap.name }}
+                                {%- else -%}
+                                  {{ friendly_name_raw if friendly_name_raw and friendly_name_raw is string else "" }}
+                                {%- endif -%}
                           - if:
                               - '{{ page_constructor }}'
                               - '{{ not embedded_climate }}'
@@ -10143,14 +10618,31 @@ actions:
                                             }}
                                           icon_color: '{{ repeat.item.icon_color_rgb }}'
                                     - *variable_entity
-                                    - action: 'esphome.{{ action_prefix }}_component_text_list'
+                                    # Climate custom buttons are icon-only: a single text component
+                                    # with no `pic`/`bri`/`text` siblings, always toggle, no long
+                                    # click and no detail page. They still go through the shared
+                                    # `button` action (with `icon_only`) so that every per-entity
+                                    # button is rendered by one code path.
+                                    - action: 'esphome.{{ action_prefix }}_button'
                                       data:
-                                        page: mem
-                                        id: command
-                                        txt_list:
-                                          - '{{ repeat.item.component }}.txt="{{ entity.icon }}"'             # Icon
-                                          - '{{ repeat.item.component }}.pco={{ entity.icon_color_rgb565 }}'  # Color
-                                          - 'vis {{ repeat.item.component }},1'                               # Visibility
+                                        page: '{{ pages.climate }}'
+                                        id: '{{ repeat.item.component }}'
+                                        state: false
+                                        icon: '{{ entity.icon }}'
+                                        icon_color: >
+                                          {{
+                                            entity.icon_color
+                                            if entity.icon_color is defined
+                                                and entity.icon_color is list
+                                                and entity.icon_color | count == 3
+                                            else [200, 200, 200]
+                                          }}
+                                        icon_font: 0     # Unused while `icon_only` is set: the font is fixed on the TFT
+                                        bri: ""
+                                        label: ""
+                                        is_page_render: false
+                                        icon_only: true
+                                        available: '{{ entity_state not in ["unavailable"] }}'
                                       continue_on_error: true
                                     - *delay_default
 
@@ -10271,7 +10763,17 @@ actions:
                                   else []
                                 }}
                               friendly_name_raw: '{{ state_attr(water_heater_entity, "friendly_name") }}'
-                              friendly_name: '{{ friendly_name_raw if friendly_name_raw and friendly_name_raw is string else "" }}'
+                              friendly_name: >-
+                                {%- if
+                                      details_overlap is defined and
+                                      details_overlap.name is string and
+                                      details_overlap.name | length > 0 and
+                                      water_heater_entity == original_state.entity_id
+                                -%}
+                                  {{ details_overlap.name }}
+                                {%- else -%}
+                                  {{ friendly_name_raw if friendly_name_raw and friendly_name_raw is string else "" }}
+                                {%- endif -%}
 
                           - condition: '{{ settings_entity_domain == "water_heater" }}'
                           - action: 'esphome.{{ action_prefix }}_component_text_list'
@@ -11334,13 +11836,14 @@ actions:
                                       else []
                                     }}
                               - variables:
+                                  # The picker pages through up to 32 options; current is always included
                                   options_truncated: >
-                                    {%- if options_raw | length <= 8 -%}
+                                    {%- if options_raw | length <= 32 -%}
                                       {{ options_raw }}
-                                    {%- elif current_option | length == 0 or current_option in options_raw[:8] -%}
-                                      {{ options_raw[:8] }}
+                                    {%- elif current_option | length == 0 or current_option in options_raw[:32] -%}
+                                      {{ options_raw[:32] }}
                                     {%- else -%}
-                                      {{ [current_option] + (options_raw[:7] | reject("equalto", current_option) | list) }}
+                                      {{ [current_option] + (options_raw[:31] | reject("equalto", current_option) | list) }}
                                     {%- endif -%}
                               - action: 'esphome.{{ action_prefix }}_component_text_list'
                                 data:
@@ -11431,9 +11934,12 @@ actions:
                                 {%- else -%}
                                   {{ s }}
                                 {%- endif -%}
+                              # `remaining` is only updated by HA when the timer is started, paused or finished,
+                              # so it holds the correct value only while paused. While active, the countdown
+                              # must be derived from `finishes_at`, otherwise every refresh resets the display.
                               remaining_raw: '{{ state_attr(entity_id, "remaining") }}'
-                              remaining_secs: >
-                                {%- if timer_state > 0 and remaining_raw is string and remaining_raw | length > 0 -%}
+                              remaining_attr_secs: >
+                                {%- if remaining_raw is string and remaining_raw | length > 0 -%}
                                   {%- set parts = remaining_raw.split(":") -%}
                                   {%- if parts | count == 3 -%}
                                     {{ (parts[0] | int) * 3600 + (parts[1] | int) * 60 + (parts[2] | int) }}
@@ -11442,6 +11948,20 @@ actions:
                                   {%- else -%}
                                     0
                                   {%- endif -%}
+                                {%- else -%}
+                                  0
+                                {%- endif -%}
+                              finishes_at_raw: '{{ state_attr(entity_id, "finishes_at") }}'
+                              remaining_secs: >
+                                {%- if timer_state == 1 -%}
+                                  {%- set finishes_at = as_datetime(finishes_at_raw | string, none) -%}
+                                  {%- if finishes_at is not none -%}
+                                    {{ [((finishes_at - now()).total_seconds()) | round(0, "ceil") | int, 0] | max }}
+                                  {%- else -%}
+                                    {{ remaining_attr_secs }}
+                                  {%- endif -%}
+                                {%- elif timer_state == 2 -%}
+                                  {{ remaining_attr_secs }}
                                 {%- else -%}
                                   0
                                 {%- endif -%}
@@ -11633,6 +12153,12 @@ actions:
                   - variables:
                       page_constructor: false
                       entity_details_pages_max_refreshes: !input entity_details_pages_max_refreshes
+                      entity_details_pages_debounce_ms: !input entity_details_pages_debounce
+                      entity_details_pages_update_interval_s: !input entity_details_pages_update_interval
+                      # Cross-iteration state: the last redraw was driven by an entity change on a
+                      # page that keeps pending presses (fan), so the next wait is a short settle
+                      # pass that redraws once the entity has been quiet for the debounce time.
+                      refresh_pending_settle: false
                   - alias: Entity details pages refresh
                     repeat:
                       while: &conditions_entity_details_pages_loop >
@@ -11666,12 +12192,28 @@ actions:
                                 else ''
                               ) != entity_initial_stamp
                             }}
-                          timeout:
-                            seconds: !input entity_details_pages_update_interval
+                          # Settle pass: debounce time; otherwise the fallback refresh interval (seconds)
+                          timeout: >-
+                            {{
+                              (entity_details_pages_debounce_ms | int(1000)) / 1000
+                              if refresh_pending_settle
+                              else entity_details_pages_update_interval_s | int(60)
+                            }}
                           continue_on_timeout: true
                         - condition: *conditions_entity_details_pages_loop
                         - variables:
                             current_page_from_sensor: '{{ states(currentpage) }}'
+                            # No entity change before the timeout: settle pass or fallback refresh
+                            refresh_settled: '{{ not wait.completed }}'
+                        - variables:
+                            # Only the fan page keeps a press pending across intermediate states,
+                            # so the other pages skip the extra settle redraw.
+                            refresh_pending_settle: >-
+                              {{
+                                not refresh_settled and
+                                current_page_from_sensor == pages.fan and
+                                original_state.entity_domain in ["fan"]
+                              }}
                         - choose:
                             - alias: Alarm page
                               conditions:
@@ -11781,6 +12323,36 @@ actions:
                                               back_page: '{{ pages.home }}'
                                           - &entity_details_show
                                             sequence:
+                                              # Store the title and icon of the button being opened on the panel. The
+                                              # panel reports them back with the page change, where the details page is
+                                              # rendered. Blank values clear an override left by a previous button.
+                                              - action: 'esphome.{{ action_prefix }}_component_text_list'
+                                                data:
+                                                  page: mem
+                                                  id: details_overlap
+                                                  txt_list:
+                                                    - '{{ "embedded_climate" if entity_id == thermostat_embedded else entity_id }}'
+                                                    - >-
+                                                      {{
+                                                        overlap.name
+                                                        if
+                                                          overlap is defined and
+                                                          overlap.name is defined and
+                                                          overlap.name is string
+                                                        else ""
+                                                      }}
+                                                    - >-
+                                                      {{
+                                                        overlap.icon
+                                                        if
+                                                          overlap is defined and
+                                                          overlap.icon is defined and
+                                                          overlap.icon is string and
+                                                          overlap.icon is match "mdi:" and
+                                                          overlap.icon.split("mdi:")[1] in all_icons
+                                                        else ""
+                                                      }}
+                                                continue_on_error: true
                                               - action: 'esphome.{{ action_prefix }}_entity_details_show'
                                                 data:
                                                   entity: '{{ "embedded_climate" if entity_id == thermostat_embedded else entity_id }}'
@@ -11827,6 +12399,17 @@ actions:
                                     sequence:
                                       - variables:
                                           last_click_button_entity_state: '{{ states(last_click_button.entity) }}'
+                                      # A button the user can see is not actionable while its entity is
+                                      # unavailable. Guarding here covers every surface that calls this
+                                      # anchor: button pages, climate and home custom buttons, hardware
+                                      # buttons. Skipped under "Show as off", where the panel gives the
+                                      # user no indication that the tap would be pointless.
+                                      - condition: >-
+                                          {{
+                                            unavailable_behavior | int(1) == 0 or
+                                            last_click_button_entity_state not in ["unavailable"]
+                                          }}
+                                      - variables:
                                           action_to_call: >-
                                             {% if entity_domain == "cover"
                                                   and last_click_button_entity_state in ["opening", "closing"]
@@ -12181,6 +12764,82 @@ actions:
                                 sequence:
                                   - *short_press_action_call
 
+                      - alias: Fan page mode buttons
+                        # The display only reports which slot was pressed. Its meaning is derived
+                        # from the entity with the same rules as the page render: speed buttons
+                        # (highest speed on top, off at the bottom) for up to 3 speeds, otherwise
+                        # preset modes when there is no speed control at all.
+                        conditions:
+                          - '{{ nspanel_event.page is defined and nspanel_event.page == pages.fan }}'
+                          - '{{ nspanel_event.component is defined and nspanel_event.component is match "mode_bt[1-5]$" }}'
+                          - '{{ nspanel_event.entity is defined and nspanel_event.entity is string and nspanel_event.entity is match "fan\\." }}'
+                          - '{{ states[nspanel_event.entity] is not none }}'
+                        sequence:
+                          - variables:
+                              # Action names are templated, as a literal fan.* action fails validation
+                              # on systems without any fan integration loaded.
+                              fan_actions:
+                                turn_off: "fan.turn_off"
+                                set_percentage: "fan.set_percentage"
+                                set_preset_mode: "fan.set_preset_mode"
+                              fan_slot: '{{ nspanel_event.component[7:] | int(0) }}'
+                              fan_supported_features: '{{ state_attr(nspanel_event.entity, "supported_features") | int(0) }}'
+                              fan_percentage_step: '{{ state_attr(nspanel_event.entity, "percentage_step") | float(0) }}'
+                              fan_preset_modes_attr: '{{ state_attr(nspanel_event.entity, "preset_modes") }}'
+                          - variables:
+                              fan_speed_steps: >-
+                                {{
+                                  (100 / fan_percentage_step) | round(0) | int(0)
+                                  if fan_percentage_step > 0
+                                  else 0
+                                }}
+                              fan_preset_modes: >-
+                                {{
+                                  fan_preset_modes_attr
+                                  if
+                                    fan_preset_modes_attr is iterable and
+                                    fan_preset_modes_attr is not string
+                                  else []
+                                }}
+                          - variables:
+                              fan_speed_available: '{{ fan_speed_steps > 0 and fan_supported_features | bitwise_and(1) > 0 }}'
+                          - variables:
+                              fan_speed_buttons: '{{ fan_speed_available and fan_speed_steps <= 3 }}'
+                          - choose:
+                              - alias: Speed button
+                                conditions:
+                                  - '{{ fan_speed_buttons }}'
+                                  - '{{ fan_slot >= 1 and fan_slot <= fan_speed_steps + 1 }}'
+                                sequence:
+                                  - variables:
+                                      fan_speed_index: '{{ fan_speed_steps + 1 - fan_slot }}'  # 0 = off
+                                  - if: '{{ fan_speed_index == 0 }}'
+                                    then:
+                                      - action: '{{ fan_actions.turn_off }}'
+                                        target:
+                                          entity_id: '{{ nspanel_event.entity }}'
+                                        continue_on_error: true
+                                    else:
+                                      # Integer division, as HA's ordered-list helpers: 3 speeds -> 33, 66, 100
+                                      - action: '{{ fan_actions.set_percentage }}'
+                                        data:
+                                          percentage: '{{ (fan_speed_index * 100) // fan_speed_steps }}'
+                                        target:
+                                          entity_id: '{{ nspanel_event.entity }}'
+                                        continue_on_error: true
+                              - alias: Preset mode button
+                                conditions:
+                                  - '{{ not fan_speed_available }}'
+                                  - '{{ fan_supported_features | bitwise_and(8) > 0 }}'
+                                  - '{{ fan_slot >= 1 and fan_slot <= fan_preset_modes | count }}'
+                                sequence:
+                                  - action: '{{ fan_actions.set_preset_mode }}'
+                                    data:
+                                      preset_mode: '{{ fan_preset_modes[fan_slot - 1] }}'
+                                    target:
+                                      entity_id: '{{ nspanel_event.entity }}'
+                                    continue_on_error: true
+
                       - alias: Home page custom buttons
                         conditions:
                           - '{{ nspanel_event.page == pages.home }}'
@@ -12212,14 +12871,24 @@ actions:
                                 name: '{{ last_click_button.name if last_click_button.name is defined else None }}'
                           - *variables_light_modes
                           - condition: '{{ entity_id_valid }}'
-                          - if: '{{ click_opens_details or entity_domain == "timer" }}'
-                            then:
-                              - variables:
-                                  back_page: '{{ pages.home }}'
-                              - *variable_entity
-                              - *entity_details_show
-                            else:
-                              - *short_press_action_call
+                          - choose:
+                              - alias: Long click
+                                conditions:
+                                  - '{{ nspanel_event.command == "long_click" or click_opens_details or entity_domain == "timer" }}'
+                                  - '{{ entity_domain in domains_functionality.detailed }}'
+                                  - '{{ entity_domain != "light" or light_has_details }}'
+                                  - '{{ entity_domain != "fan" or supported_features | bitwise_and(11) > 0 }}'
+                                sequence:
+                                  - variables:
+                                      back_page: '{{ pages.home }}'
+                                  - *variable_entity
+                                  - *entity_details_show
+                              - alias: Short click
+                                conditions:
+                                  - '{{ nspanel_event.command == "short_click" }}'
+                                  - '{{ entity_domain not in domains_functionality.detailed_only }}'
+                                sequence:
+                                  - *short_press_action_call
 
               - alias: Versions mismatch
                 conditions:
@@ -12389,6 +13058,8 @@ actions:
 
                                 *For more detailed instructions, please refer to the online documentation: [How to Update Blueprint](https://github.com/edwardtfn/NSPanel-Easy/blob/main/docs/howto.md#update-blueprint).*
                             continue_on_error: true
+                          - alias: Custom action - Blueprint outdated
+                            sequence: !input versioning_blueprint_outdated_action
 
                       - alias: TFT is older than expected
                         conditions:
@@ -12478,6 +13149,8 @@ actions:
                                     *For more detailed instructions, please refer to the online documentation:
                                     [How to Update TFT](https://github.com/edwardtfn/NSPanel-Easy/blob/main/docs/howto.md#update-tft).*
                                 continue_on_error: true
+                          - alias: Custom action - TFT outdated
+                            sequence: !input versioning_tft_outdated_action
                       # yamllint disable rule:comments-indentation
                       # yamllint enable rule:line-length
                       # yamllint enable rule:comments-indentation

@@ -92,10 +92,11 @@ globals:
     restore_value: true
     initial_value: '${buttons_color_off}'
 
+  # Bitmask of the pages (by page id) where the buttons bars are drawn - home page by default
   - id: buttons_bars_pages
-    type: uint32_t
+    type: uint64_t
     restore_value: true
-    initial_value: '1'
+    initial_value: '1ULL << get_page_id("home")'
 
 script:
   - id: !extend action_component_color
@@ -109,6 +110,35 @@ script:
             }
           }
 
+  - id: !extend action_component_text_list
+    then:
+      - lambda: |-
+          if (page != "mem") return;
+          if (component == "buttons_bars_pages") {
+            // Page names are resolved to page ids here, so the selection doesn't depend on the page order
+            static_assert(PAGE_COUNT <= 64, "buttons_bars_pages cannot hold all pages");
+            uint64_t pages_mask = 0;
+            bool has_page_names = false;
+            for (const auto &page_name : txt_list) {
+              if (page_name.empty()) continue;  // An empty list is sent as a single empty element
+              has_page_names = true;
+              const uint8_t page_id = get_page_id(page_name.c_str());
+              if (page_id == UINT8_MAX) {
+                ESP_LOGW("${TAG_HW_BUTTONS}", "Buttons bars: unknown page '%s'", page_name.c_str());
+                continue;
+              }  // if (page_id == UINT8_MAX)
+              pages_mask |= (1ULL << page_id);
+            }  // for (page_name : txt_list)
+            if (has_page_names and pages_mask == 0) {
+              // Pages were selected, but none is valid - fall back to the default instead of hiding the bars
+              ESP_LOGW("${TAG_HW_BUTTONS}", "Buttons bars: no valid page selected, using 'home'");
+              pages_mask = 1ULL << get_page_id("home");
+            }  // if (has_page_names and pages_mask == 0)
+            id(buttons_bars_pages) = pages_mask;
+            blueprint_status_flags.hw_buttons_settings = true;
+            return;
+          }  // if (component == "buttons_bars_pages")
+
   - id: !extend action_component_val
     then:
       - lambda: |-
@@ -119,9 +149,6 @@ script:
             } else if (component == "hw_bt_right") {
               id(hardware_settings).button_right_state = (val != 0);
               refresh_hardware_buttons_bars->execute(2, false);
-            } else if (component == "buttons_bars_pages") {
-              id(buttons_bars_pages) = val;
-              blueprint_status_flags.hw_buttons_settings = true;
             } else if (component == "button_left") {
               id(hardware_settings).button_left_enabled = (val != 0);
             } else if (component == "button_right") {
@@ -164,13 +191,13 @@ script:
           if (system_flags.tft_upload_active) return;  // Skip refresh if TFT update is in progress
           ESP_LOGV("${TAG_HW_BUTTONS}", "Script: refresh_hardware_buttons_bars");
           ESP_LOGV("${TAG_HW_BUTTONS}", "  Page:               %s", page_names[current_page_id]);
-          ESP_LOGV("${TAG_HW_BUTTONS}", "  buttons_bars_pages: %" PRIu32, id(buttons_bars_pages));
+          ESP_LOGV("${TAG_HW_BUTTONS}", "  buttons_bars_pages: 0x%016" PRIX64, id(buttons_bars_pages));
           ESP_LOGV("${TAG_HW_BUTTONS}", "  button_mask:");
           ESP_LOGV("${TAG_HW_BUTTONS}", "    left_enabled:     %s", YESNO(id(hardware_settings).button_left_enabled));
           ESP_LOGV("${TAG_HW_BUTTONS}", "    left_state:       %s", ONOFF(id(hardware_settings).button_left_state));
           ESP_LOGV("${TAG_HW_BUTTONS}", "    right_enabled:    %s", YESNO(id(hardware_settings).button_right_enabled));
           ESP_LOGV("${TAG_HW_BUTTONS}", "    right_state:      %s", ONOFF(id(hardware_settings).button_right_state));
-          if ((id(buttons_bars_pages) & (1 << current_page_id)) == 0) {
+          if (current_page_id >= PAGE_COUNT or (id(buttons_bars_pages) & (1ULL << current_page_id)) == 0) {
             ESP_LOGV("${TAG_HW_BUTTONS}", "Buttons bars not visible");
             return;
           }

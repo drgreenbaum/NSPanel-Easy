@@ -139,11 +139,11 @@ script:
             } else if (component == "button_left_label_color") {
               if (id(button_left_label_color) == color) return;
               id(button_left_label_color) = color;
-              refresh_hardware_buttons_labels->execute();
+              refresh_hardware_buttons_labels->execute(false);
             } else if (component == "button_right_label_color") {
               if (id(button_right_label_color) == color) return;
               id(button_right_label_color) = color;
-              refresh_hardware_buttons_labels->execute();
+              refresh_hardware_buttons_labels->execute(false);
             }
           }
 
@@ -189,7 +189,7 @@ script:
                                                                             : id(button_right_label);
             if (stored_label == label) return;
             stored_label = label;
-            refresh_hardware_buttons_labels->execute();
+            refresh_hardware_buttons_labels->execute(false);
             return;
           }  // if (component == "button_left_label" or component == "button_right_label")
           if (component == "buttons_labels_pages") {
@@ -213,8 +213,11 @@ script:
               pages_mask = 1ULL << get_page_id("home");
             }  // if (has_page_names and pages_mask == 0)
             if (id(buttons_labels_pages) == pages_mask) return;
+            // Labels already drawn on the current page must be cleared if it's no longer selected
+            const bool was_shown = current_page_id < PAGE_COUNT and
+                                   (id(buttons_labels_pages) & (1ULL << current_page_id)) != 0;
             id(buttons_labels_pages) = pages_mask;
-            refresh_hardware_buttons_labels->execute();
+            refresh_hardware_buttons_labels->execute(was_shown);
             return;
           }  // if (component == "buttons_labels_pages")
 
@@ -287,7 +290,7 @@ script:
             if (force or color_left != labels_last_color_left or color_right != labels_last_color_right) {
               labels_last_color_left = color_left;
               labels_last_color_right = color_right;
-              refresh_hardware_buttons_labels->execute();
+              refresh_hardware_buttons_labels->execute(false);
             }  // if (bar color changed)
           }  // if (buttons_bar_text_follow_color)
 
@@ -344,12 +347,15 @@ script:
   # is drawn on top of the page, it must be called whenever the page is loaded
   - id: refresh_hardware_buttons_labels
     mode: restart
+    parameters:
+      clear: bool  # Clear the labels if the current page isn't selected (e.g. it was just removed)
     then:
       - script.wait: page_change
       - lambda: |-
           if (system_flags.tft_upload_active) return;  // Skip refresh if TFT update is in progress
           if (current_page_id >= PAGE_COUNT) return;
-          if ((id(buttons_labels_pages) & (1ULL << current_page_id)) == 0) return;
+          const bool show = (id(buttons_labels_pages) & (1ULL << current_page_id)) != 0;
+          if (not show and not clear) return;
 
           const uint8_t display_mode_index = display_model->active_index().value_or(UINT8_MAX);
           if (display_mode_index == UINT8_MAX) return;
@@ -384,7 +390,7 @@ script:
             left = is_eu ? LabelPosition{47, 288} : LabelPosition{16, 448};
             right = is_eu ? LabelPosition{288, 288} : LabelPosition{184, 448};
           } else {
-            ESP_LOGW("${TAG_HW_BUTTONS}", "Labels not supported on page '%s'", page_names[current_page_id]);
+            if (show) ESP_LOGW("${TAG_HW_BUTTONS}", "Labels not supported on page '%s'", page_names[current_page_id]);
             return;
           }  // if (current_page_id)
 
@@ -416,12 +422,16 @@ script:
                                        position.x, position.y, LABEL_WIDTH, LABEL_HEIGHT, LABEL_FONT_ID, color,
                                        background, fill, escaped.c_str());
           };
-          draw_label(left, id(button_left_label), color_left);
-          draw_label(right, id(button_right_label), color_right);
+          // An empty text only repaints the background, clearing the labels
+          static const std::string NO_LABEL;
+          draw_label(left, show ? id(button_left_label) : NO_LABEL, color_left);
+          draw_label(right, show ? id(button_right_label) : NO_LABEL, color_right);
 
   - id: !extend page_change
     then:
-      - script.execute: refresh_hardware_buttons_labels
+      - script.execute:
+          id: refresh_hardware_buttons_labels
+          clear: false
 
   - id: !extend stop_all
     then:
